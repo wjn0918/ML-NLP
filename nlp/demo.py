@@ -1,25 +1,18 @@
 """训练模型"""
-import jieba
-import pymysql
+import logging
+
 from numpy.ma import zeros
 
-import re
-import functools
 from jieba import analyse
 from jieba import posseg as pseg
-from pymysql.cursors import DictCursor
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.externals import joblib
 from gensim import corpora, models, similarities
 
+from nlp.tools.db import executeSql
+from nlp.tools.preprocess import tokenization
 
-def createDataList(dataArr):
-    """创建词袋"""
-    returnDataList = set()
-    for data in dataArr:
-        returnDataList = returnDataList | set(data)
-    # print(returnDataList)
-    return list(returnDataList)
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 def setWord2Vec(vocabList, inputSet):
     """
@@ -44,24 +37,9 @@ def setWord2Vec(vocabList, inputSet):
     return returnVec
 
 
-def tokenization(content):
-    '''
-    {标点符号、连词、助词、副词、介词、时语素、‘的’、数词、方位词、代词}
-    {'x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r'}
-    去除文章中特定词性的词
-    :content str
-    :return list[str]
-    '''
-    # stop_flags = {'x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r'}
-    stop_flags = {'x'}
-    stop_words = {'了'}
-    words = pseg.cut(content)
-    words = ''.join([word for word, flag in words if flag not in stop_flags and word not in stop_words])
-    return analyse.extract_tags(words,10)
-
 def createDataList(dataArr):
     """
-    去重词语列表
+    去重词语列表，创建词袋
     :param dataArr:
     :return:
     """
@@ -70,6 +48,7 @@ def createDataList(dataArr):
         returnDataList = returnDataList | set(data)
     # print(returnDataList)
     return list(returnDataList)
+
 
 def setWord2Vec(vocabList, inputSet):
     """
@@ -95,28 +74,15 @@ def setWord2Vec(vocabList, inputSet):
     return returnVec
 
 
-def get_db():
-    host = 'localhost'
-    port = 3306
-    user_name = 'root'
-    password = '123456'
-    db_name = 'cs'
-    conn = pymysql.connect(
-        host,
-        user_name,
-        password,
-        db_name)
-    return conn
 
 def get_data():
     """
     从数据库中加载数据
     """
     dataSet = {"data":[],"label":[]}
-    cursor = get_db().cursor(DictCursor)
-    sql = "select content,label from t_txt"
-    cursor.execute(sql)
-    for data in cursor.fetchall():
+    sql = "select content,label from t_nlp"
+    r = executeSql(sql,returnDict=True)
+    for data in r:
         dataSet['data'].append(data['content'])
         dataSet['label'].append(data['label'])
     # print(dataSet)
@@ -133,53 +99,73 @@ def compute_similarity(all_articles,article):
     dictionary = corpora.Dictionary(reduced_contents)
     #生成词袋模型
     corpus = [dictionary.doc2bow(text) for text in reduced_contents]
-    # print(corpus)
     tfidf = models.TfidfModel(corpus)
     vec = dictionary.doc2bow(tokenization(article))
-    index = similarities.MatrixSimilarity(tfidf[corpus])  # 对整个语料库进行转换并编入索引，准备相似性查询
+    index = similarities.MatrixSimilarity(tfidf[corpus],num_features=12)  # 对整个语料库进行转换并编入索引，准备相似性查询
     sorted_r = sorted(list(enumerate(index[vec])),key=lambda x:x[1],reverse=True)
     # print(all_articles)
     for r in sorted_r:
         print(all_articles[r[0]]+"\tscore: " + str(r[1]))
 
 
+
 def get_similarity_article(category,article):
-    sql = 'select content from t_txt where label = "%s"' %(category)
-    cursor = get_db().cursor(DictCursor)
-    cursor.execute(sql)
-    all_articles = []
-    for r in cursor.fetchall():
-        all_articles.append(r['content'])
-    cursor.close()
-    compute_similarity(all_articles,article)
+    """
+    获取相似类型文章
+    :param category: 文章分类
+    :param article: 需要查找类型的文章
+    :return: 相似类型文章
+    """
+    sql = 'select content from t_nlp where label = %s'
+    args = (category)
+    results = executeSql(sql,args=args,returnDict=True)
+    if len(results) != 0:
+        all_articles = []
+        for r in results:
+            all_articles.append(r['content'])
+        compute_similarity(all_articles,article)
+
     pass
 
+def constructWordVec(txts):
+    print(txts)
+    dictionary = corpora.Dictionary(txts)
+    return [dictionary.doc2bow(text) for text in txts]
 
-if __name__ == '__main__':
 
+def preCategory(txt):
+    """
+    预测文本的类别
+    :param txt: 需要分类的文本
+    :return: 文本类别
+    """
     datas = get_data()
     contents = datas['data']
     labels = datas['label']
     reduced_contents = []
+    # 将每篇文章的所有权重前n词放入数组中
     for content in contents:
         reduced_contents.append(tokenization(content))
-    global all_word
     all_word = createDataList(reduced_contents)
-    # print(reduced_contents)
     mnb = MultinomialNB()
     dataVec = setWord2Vec(all_word, reduced_contents)
     mnb.fit(dataVec, labels)
+    r = [tokenization(txt)]
+    csDataVec = setWord2Vec(all_word, r)
+    s = mnb.predict(csDataVec)[0]
+    print("该文章属于:%s" % (s))
+    return s
+
+def main():
+
     csData = '他身价高达千亿为博红颜一笑狂撒10亿买房现68岁竟悔不当初'
-    while True:
-        csData = input("请输入需要检索的文章：")
-        r = [tokenization(csData)]
-        csDataVec = setWord2Vec(all_word, r)
-        s = mnb.predict(csDataVec)[0]
-        print("该文章属于:%s" %(s))
-        import time
-        time.sleep(3)
-        print("类似文章有：")
-        get_similarity_article(s,csData)
-    
+    category = preCategory(csData)
+    get_similarity_article(category,csData)
+
+
+
+if __name__ == '__main__':
+    main()
+
     
 
