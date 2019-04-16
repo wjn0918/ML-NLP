@@ -2,7 +2,7 @@
 from jieba import posseg as pseg
 from jieba import analyse
 from gensim import corpora
-
+import os
 
 # 数据标准化
 def tokenization(content):
@@ -14,9 +14,11 @@ def tokenization(content):
     '''
     # stop_flags = {'x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r'}
     stop_flags = {'x','q','w','t','m'}              #除去对应词性的词
-    stop_words = {'了'}             #停用词
     words = pseg.cut(content)
-    words = ''.join([word for word, flag in words if flag not in stop_flags and word not in stop_words])
+    words = ''.join([word for word, flag in words if flag not in stop_flags])
+    # stop_words_path = os.path.split(os.getcwd())[0] + '/lib/stop_words.txt'    #加载停用词
+    stop_words_path = 'lib/stop_words.txt'
+    analyse.set_stop_words(stop_words_path)         #除去停用词
     return analyse.extract_tags(words)
 
 
