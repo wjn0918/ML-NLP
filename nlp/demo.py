@@ -1,6 +1,7 @@
 """训练模型"""
 import logging
 import os
+import pickle
 
 from numpy.ma import zeros
 
@@ -77,6 +78,27 @@ def setWord2Vec(vocabList, inputSet):
     # print(returnVec)
     return returnVec
 
+def if_update():
+    """
+    判断是否需要重新加载底库数据
+    :return: True 需要加载 False 不需要加载
+    """
+    result = True
+    sql = 'select count(1) as data_num from t_news'
+    new_num = executeSql(sql, returnDict=True)[0]['data_num']   #数据库此时的数据量
+    num_path = 'lib/data_num.txt'
+    if os.path.exists(num_path):
+        with open(num_path,'r') as fr:
+            old_num = int(fr.read())
+            if old_num == new_num:
+                result = False
+                print("无需更新")
+    else:
+        sql = 'select count(1) as data_num from t_news'
+        r = executeSql(sql, returnDict=True)[0]['data_num']
+        with open(num_path, 'w') as fw:
+            fw.write(str(r))
+    return result
 
 def get_data():
     """
@@ -169,18 +191,34 @@ def preCategory(txt):
     :param txt: 需要分类的文本，String
     :return: 文本类别 String
     """
-    datas = get_data()
-    contents = datas['data']
-    labels = datas['label']
-    reduced_contents = []
-    for content in contents:
-        reduced_contents.append(tokenization(content))
-    all_word = createDataList(reduced_contents)
-    # print(all_word)
-    # print(type(all_word))
-    mnb = MultinomialNB()
-    dataVec = setWord2Vec(all_word, reduced_contents)
-    mnb.fit(dataVec, labels)
+    if if_update():
+        """如果底库更新，则重新训练模型进行保存
+        lib/dump.txt   词袋模型的序列化（类似['王倩', '奔驰', '利之星', '京报', '4S店']）
+        lib/mnb.m  存放训练好的朴素贝叶斯分类模型
+        """
+        datas = get_data()
+        contents = datas['data']
+        labels = datas['label']
+        reduced_contents = []
+        for content in contents:
+            reduced_contents.append(tokenization(content))
+        all_word = createDataList(reduced_contents)
+        # print(type(all_word))
+        # 将词袋序列化本地
+        f = open('lib/dump.txt', 'wb')
+        pickle.dump(all_word, f)
+        f.close()
+        print(all_word)
+        mnb = MultinomialNB()
+        dataVec = setWord2Vec(all_word, reduced_contents)
+        mnb.fit(dataVec, labels)
+        joblib.dump(mnb,'lib/mnb.m')
+    else:
+        fr = open('lib/dump.txt', 'rb')
+        all_word = pickle.load(fr)
+        fr.close()
+        mnb = joblib.load('lib/mnb.m')
+        pass
     r = [tokenization(txt)]
     csDataVec = setWord2Vec(all_word, r)
     category = mnb.predict(csDataVec)[0]
@@ -202,6 +240,10 @@ def action(doc):
     return dataSets
 
 def cs():
+    """
+    仅用于测试
+    :return:
+    """
     import datetime
     s = datetime.datetime.now()
     with open('lib/cs.txt', encoding='utf8') as rd:
