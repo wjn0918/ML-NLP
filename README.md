@@ -20,9 +20,9 @@
         操作数据库工具  
      + preprocess.py  
         数据预处理工具（分词，去除停用词，tf-idf选词等操作）  
-server.py  
+ * server.py  
     微服务服务端  
-client.py  
+ * client.py  
     微服务客户端  
-demo.py  
+ * demo.py  
     主程序  
