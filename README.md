@@ -10,15 +10,15 @@
   
 【各文件说明】  
 ---
-*conf  
+ * conf  
     存储配置信息  
-*lib  
+ * lib  
     存放一些文档，（如测试数据，停用词表）  
-*tools  
+ * tools  
     存放一些工具类  
-    +db.py  
+     + db.py  
         操作数据库工具  
-    +preprocess.py  
+     + preprocess.py  
         数据预处理工具（分词，去除停用词，tf-idf选词等操作）  
 server.py  
     微服务服务端  
