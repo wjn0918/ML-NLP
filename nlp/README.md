@@ -11,4 +11,4 @@
     data_num.txt        存放数据库中数据量，用于比对是否有新数据加入而需要重新训练模型  
     dump.txt            所有数据构建的词袋模型  
     mnb.m               训练好的朴素贝叶斯模型  
-    stop_words.txt      停用词列表  
+    stop_words.txt      停用词列表    
