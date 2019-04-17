@@ -1,23 +1,41 @@
-import hprose
+import os
 
-from nlp.demo import action
+import hprose
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from nlp.master import action, init
 from nlp.tools.db import conn_mongodb
 
 
 def pre_txt(doc):
-	"""
-	预测文本类别
-	:param doc: 需要分类的文本
-	:return:
-	"""
-	r = action(doc)
+    """
+    预测文本类别
+    :param doc: 需要分类的文本
+    :return:
+    """
+    r = action(doc)
+    return r
 
-	return r
 
 def main():
-	server = hprose.HttpServer(port = 8181)
-	server.addFunction(pre_txt)
-	server.start()
+    scheduler = BackgroundScheduler()
+    # 间隔3秒钟执行一次
+    # scheduler.add_job(init, 'interval', seconds=3)
+    # 定时任务12:00执行
+    scheduler.add_job(init, 'cron', hour=24, minute=0)
+    # 这里的调度任务是独立的一个线程
+    scheduler.start()
+    print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
+    try:
+        # 主任务是独立的线程执行
+        server = hprose.HttpServer(port=8181)
+        server.addFunction(pre_txt)
+        server.start()
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
+        print('Exit The Job!')
+
+
 
 if __name__ == '__main__':
-	main()
+    main()
