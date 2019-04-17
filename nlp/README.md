@@ -24,5 +24,5 @@
     微服务服务端  
  * client.py  
     微服务客户端  
- * demo.py  
+ * master.py  
     主程序  
